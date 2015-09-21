@@ -1,9 +1,13 @@
 #!/bin/bash
 
-BIND_INTERFACE=eth0
+BIND_INTERFACE=$1
+if [ -z $BIND_INTERFACE ] ; then
+  echo "usage: $0 <bind interface>"
+  exit 1
+fi
+
 MULTICAST_IP_ADDR="232.0.0.1"
-AUDIO_UDP_PORT="5004"
-VIDEO_UDP_PORT="5005"
+PORT="5004"
 
 BIND_ADDRESS=`ifconfig $BIND_INTERFACE | grep "inet addr:" | awk '{print \$2}' | awk -F: '{print \$2}'`
 if [ -z "`gst-inspect-1.0 | grep omxh264enc`" ] ; then
@@ -12,8 +16,10 @@ else
   H264_ENC=omxh264enc
 fi
 
-gst-launch-1.0 -v videotestsrc is-live=true ! $H264_ENC ! queue ! h264parse ! rtph264pay ! videosink. \
-                  audiotestsrc is-live=true ! avenc_ac3_fixed bitrate=64000 ! rtpac3pay ! queue ! audiosink. \
-                  udpsink name="audiosink" auto-multicast=true ttl-mc=3 bind-address=$BIND_ADDRESS host=$MULTICAST_IP_ADDR port=$AUDIO_UDP_PORT \
-                  udpsink name="videosink" auto-multicast=true ttl-mc=3 bind-address=$BIND_ADDRESS host=$MULTICAST_IP_ADDR port=$VIDEO_UDP_PORT
+echo "Launching test stream at rtp://$BIND_ADDRESS@$MULTICAST_IP_ADDR:$PORT"
+
+gst-launch-1.0 videotestsrc is-live=true ! $H264_ENC ! queue ! h264parse ! mux. \
+               audiotestsrc is-live=true ! avenc_ac3_fixed bitrate=64000 ! mux. \
+               mpegtsmux name="mux" ! queue ! rtpmp2tpay ! \
+               udpsink auto-multicast=true ttl-mc=3 bind-address=$BIND_ADDRESS host=$MULTICAST_IP_ADDR port=$PORT \
 
